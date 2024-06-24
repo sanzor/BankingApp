@@ -2,6 +2,9 @@
 -name  ${NODE_NAME}
 #port
 -ex_banking port ${PORT}
+<<<<<<< HEAD
+=======
 
 #xx
 -ex_banking xx ${XX}
+>>>>>>> master

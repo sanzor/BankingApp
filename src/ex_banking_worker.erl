@@ -2,7 +2,8 @@
 -behaviour(gen_server).
 -include("records.hrl").
 -export([create_user/2,get_balance/2,deposit/2,withdraw/2,send/2]).
--export([handle_call/3,handle_cast/2,init/1,start_link/0,send_result/2]).
+-export([fwd_create_user/3,fwd_get_balance/3,fwd_deposit/3,fwd_withdraw/3,fwd_send/3]).
+-export([handle_call/3,handle_cast/2,init/1,start_link/0]).
 
 -define(NAME,?MODULE).
 -record(state,{
@@ -16,6 +17,12 @@ start_link()->
 
 init(CounterRef)->
     {ok,#state{counter_Ref=CounterRef}}.
+
+
+
+%%
+% Sync API
+%%
 create_user(Pid,User)->
     gen_server:call(Pid,{create_user,User}).
 get_balance(Pid,{User,Currency})->
@@ -26,11 +33,84 @@ withdraw(Pid,{User,Amount,Currency})->
     gen_server:call(Pid,{Currency,{withdraw,{User,Amount}}}).
 send(Pid,{From_User,To_User,Amount,Currency})->
     gen_server:call(Pid,{Currency,{send,{From_User,To_User,Amount}}}).
-send_result(Pid,Message)->
-    gen_server:reply(Pid,Message).
 
-%%%%%%%%%%%%%%%%%%%% Handlers %%%%%%%%%%%%
-handle_cast(_Request,State)->{noreply,State}.
+
+%%
+% Proxy API
+%%
+-spec fwd_create_user(Pid::pid(),SendTo::pid(),User::string())->any().
+fwd_create_user(Pid,SendTo,User)->
+    gen_server:cast(Pid,{SendTo,{create_user,User}}).
+
+-spec fwd_get_balance(Pid::pid(),SendTo::pid(),{User::string(),Currency::string()})->any().
+fwd_get_balance(Pid,SendTo,{User,Currency})->
+    gen_server:cast(Pid,{SendTo,{Currency,{get_balance,User}}}).
+
+
+
+fwd_deposit(Pid,SendTo,{User,Amount,Currency})->
+    gen_server:cast(Pid,{SendTo,{Currency,{deposit,{User,Amount}}}}).
+fwd_withdraw(Pid,SendTo,{User,Amount,Currency})->
+    gen_server:cast(Pid,{SendTo,{Currency,{withdraw,{User,Amount}}}}).
+fwd_send(Pid,SendTo,{From_User,To_User,Amount,Currency})->
+    gen_server:cast(Pid,{SendTo,{Currency,{send,{From_User,To_User,Amount}}}}).
+
+%%% Handlers %%%%%%
+
+
+%%
+% cast handlers
+%%
+
+-spec handle_cast({SendTo::pid(),{create_user,UserId::string()}},State::term())->StateResult::term(). 
+handle_cast({SendTo,{create_user,UserId}}, State)->
+    ok=do_create_user(UserId, State),
+    gen_server:reply(SendTo,ok),
+    {stop,normal,State};
+
+handle_cast({SendTo,{Currency,Request}},State)->
+    {ok,Coefficient}=can_get_coefficient(Currency, State),
+     do_cast(Coefficient,SendTo,Request,State).
+
+do_cast(Coefficient,SendTo,{get_balance,UserId},State)->
+    {ok,User}=get_user(UserId,State),
+    Reply=case ex_banking_account:get_balance(User#user.pid) of
+            {ok,BalanceInBaseCurrency}->{ok,BalanceInBaseCurrency/Coefficient};
+             Error -> Error
+          end,
+    gen_server:reply(SendTo, Reply),
+    {noreply,stop,State};
+
+do_cast(Coefficient,SendTo,{deposit,{UserId,Amount}},State)->
+    {ok,User}=get_user(UserId,State),
+    Reply=case ex_banking_account:deposit(User#user.pid,Amount*Coefficient) of
+            {ok,BalanceInBaseCurrency}->{ok,BalanceInBaseCurrency/Coefficient};
+             Error -> Error
+          end,
+    gen_server:reply(SendTo, Reply),
+    {noreply,stop,State};
+
+do_cast(Coefficient,SendTo,{withdraw,{UserId,Amount}},State)->
+    {ok,User}=get_user(UserId,State),
+    Reply=case ex_banking_account:withdraw(User#user.pid,Amount*Coefficient) of
+            {ok,BalanceInBaseCurrency}->{ok,BalanceInBaseCurrency/Coefficient};
+             Error -> Error
+          end,
+    gen_server:reply(SendTo, Reply),
+    {noreply,stop,State};
+    
+do_cast(Coefficient,SendTo,{send,{From_User_Id,To_User_Id,Amount}},State)->
+    {ok,From_User,To_User}=get_sender_and_receiver(From_User_Id, To_User_Id, State),
+    {ok,From_User_Balance,To_User_Balance}=handle_send(From_User#user.pid, To_User#user.pid, Amount*Coefficient, State),
+    Reply={ok,From_User_Balance/Coefficient,To_User_Balance/Coefficient},
+    gen_server:reply(SendTo, Reply),
+    {stop,normal,State}.
+        
+
+%%
+%  Call handlers
+%%
+
 
 handle_call({create_user,UserId}, _From, State)->
     ok=do_create_user(UserId, State),

@@ -2,13 +2,13 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
--export([init_per_suite/1,end_per_suite/1,init_per_testcase/2,end_per_testcase/2]).
+% -export([init_per_suite/1,end_per_suite/1,init_per_testcase/2,end_per_testcase/2]).
 -export([all/0]).
 
 
-all([
+all()->[
     can_run_one_single_node
-])
+].
 init_per_suite(Config)->
     [].
 end_per_suite(Config)->

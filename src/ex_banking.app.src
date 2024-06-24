@@ -2,7 +2,7 @@
  [{description, "An OTP application"},
   {vsn, "0.1.0"},
   {registered, []},
-  {mod, {ex_banking, []}},
+  {mod, {ex_banking_app, []}},
   {applications,
    [kernel,
     stdlib
@@ -14,8 +14,11 @@
       {port,7000},
       {xx,10}
     ]},
-  {modules, [ex_banking,
+  {modules, [
+             ex_banking,
+             ex_banking_app,
              ex_banking_sup,
+             ex_banking_currency_api,
              ex_banking_currency_server,
              ex_banking_worker,
              ex_banking_worker_sup,

@@ -21,6 +21,7 @@ start_link()->
 
 init(_Args)->
     {ok,Value}=application:get_env(ex_banking, base_currency),
+     ets:new(currencies, [named_table]),
     {ok,#state{currencies=dict:store(Value, 1, dict:new())}}.
 
 
